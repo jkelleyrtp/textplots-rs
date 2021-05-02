@@ -56,9 +56,9 @@ pub mod utils;
 
 use drawille::Canvas as BrailleCanvas;
 use scale::Scale;
-use std::cmp;
 use std::default::Default;
 use std::f32;
+use std::{cmp, fmt::Display};
 
 /// Controls the drawing.
 pub struct Chart<'a> {
@@ -71,13 +71,31 @@ pub struct Chart<'a> {
     /// X-axis end value.
     xmax: f32,
     /// Y-axis start value (calculated automatically to display all the domain values).
-    ymin: f32,
+    ymin: AxisDim,
     /// Y-axis end value (calculated automatically to display all the domain values).
-    ymax: f32,
+    ymax: AxisDim,
     /// Collection of shapes to be presented on the canvas.
     shapes: Vec<&'a Shape<'a>>,
     /// Underlying canvas object.
     canvas: BrailleCanvas,
+}
+
+#[derive(Debug)]
+enum AxisDim {
+    Manual(f32),
+    Auto(f32),
+}
+impl AxisDim {
+    fn value(&self) -> f32 {
+        match self {
+            AxisDim::Auto(a) | AxisDim::Manual(a) => *a,
+        }
+    }
+}
+impl Display for AxisDim {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value())
+    }
 }
 
 /// Specifies different kinds of plotted data.
@@ -124,8 +142,8 @@ impl<'a> Chart<'a> {
         Self {
             xmin,
             xmax,
-            ymin: f32::INFINITY,
-            ymax: f32::NEG_INFINITY,
+            ymin: AxisDim::Auto(f32::INFINITY),
+            ymax: AxisDim::Auto(f32::NEG_INFINITY),
             width,
             height,
             shapes: Vec::new(),
@@ -134,7 +152,7 @@ impl<'a> Chart<'a> {
     }
 
     /// Displays bounding rect.
-    fn borders(&mut self) {
+    fn borders(&mut self) -> &mut Self {
         let w = self.width;
         let h = self.height;
 
@@ -142,10 +160,11 @@ impl<'a> Chart<'a> {
         self.vline(w);
         self.hline(0);
         self.hline(h);
+        self
     }
 
     /// Draws vertical line.
-    fn vline(&mut self, i: u32) {
+    fn vline(&mut self, i: u32) -> &mut Self {
         if i <= self.width {
             for j in 0..=self.height {
                 if j % 3 == 0 {
@@ -153,10 +172,11 @@ impl<'a> Chart<'a> {
                 }
             }
         }
+        self
     }
 
     /// Draws horizontal line.
-    fn hline(&mut self, j: u32) {
+    fn hline(&mut self, j: u32) -> &mut Self {
         if j <= self.height {
             for i in 0..=self.width {
                 if i % 3 == 0 {
@@ -164,10 +184,11 @@ impl<'a> Chart<'a> {
                 }
             }
         }
+        self
     }
 
     /// Prints canvas content.
-    pub fn display(&mut self) {
+    pub fn display(&mut self) -> &mut Self {
         self.figures();
         self.axis();
 
@@ -189,32 +210,41 @@ impl<'a> Chart<'a> {
             self.xmax,
             width = (self.width as usize) / 2 - 3
         );
+        self
     }
 
     /// Prints canvas content with some additional visual elements (like borders).
-    pub fn nice(&mut self) {
+    pub fn nice(&mut self) -> &mut Self {
         self.borders();
         self.display();
+        self
     }
 
     /// Show axis.
-    pub fn axis(&mut self) {
+    pub fn axis(&mut self) -> &mut Self {
         let x_scale = Scale::new(self.xmin..self.xmax, 0.0..self.width as f32);
-        let y_scale = Scale::new(self.ymin..self.ymax, 0.0..self.height as f32);
+        let y_scale = Scale::new(
+            self.ymin.value()..self.ymax.value(),
+            0.0..self.height as f32,
+        );
 
         if self.xmin <= 0.0 && self.xmax >= 0.0 {
             self.vline(x_scale.linear(0.0) as u32);
         }
-        if self.ymin <= 0.0 && self.ymax >= 0.0 {
+        if self.ymin.value() <= 0.0 && self.ymax.value() >= 0.0 {
             self.hline(y_scale.linear(0.0) as u32);
         }
+        self
     }
 
     // Show figures.
-    pub fn figures(&mut self) {
+    pub fn figures(&mut self) -> &mut Self {
         for shape in &self.shapes {
             let x_scale = Scale::new(self.xmin..self.xmax, 0.0..self.width as f32);
-            let y_scale = Scale::new(self.ymin..self.ymax, 0.0..self.height as f32);
+            let y_scale = Scale::new(
+                self.ymin.value()..self.ymax.value(),
+                0.0..self.height as f32,
+            );
 
             // translate (x, y) points into screen coordinates
             let points: Vec<_> = match shape {
@@ -281,6 +311,7 @@ impl<'a> Chart<'a> {
                 }
             }
         }
+        self
     }
 
     /// Return the frame.
@@ -329,8 +360,12 @@ impl<'a> Plot<'a> for Chart<'a> {
             .min_by(|x, y| x.partial_cmp(y).unwrap_or(cmp::Ordering::Equal))
             .unwrap_or(&0.0);
 
-        self.ymin = f32::min(self.ymin, ymin);
-        self.ymax = f32::max(self.ymax, ymax);
+        if let AxisDim::Auto(cur_ymax) = self.ymax {
+            self.ymax = AxisDim::Auto(f32::max(cur_ymax, ymax));
+        }
+        if let AxisDim::Manual(cur_ymin) = self.ymin {
+            self.ymin = AxisDim::Auto(f32::min(cur_ymin, ymin));
+        }
 
         self
     }
