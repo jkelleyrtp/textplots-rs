@@ -237,6 +237,16 @@ impl<'a> Chart<'a> {
         self
     }
 
+    pub fn ymax(&mut self, val: f32) -> &mut Self {
+        self.ymax = AxisDim::Manual(val);
+        self
+    }
+
+    pub fn ymin(&mut self, val: f32) -> &mut Self {
+        self.ymin = AxisDim::Manual(val);
+        self
+    }
+
     // Show figures.
     pub fn figures(&mut self) -> &mut Self {
         for shape in &self.shapes {
